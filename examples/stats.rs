@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use war3_stats_observer::ObserverData;
+use warcraft3_stats_observer::ObserverData;
 
 fn main() {
     let od = match ObserverData::new() {
