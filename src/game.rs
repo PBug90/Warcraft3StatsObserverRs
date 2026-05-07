@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::string_utils::PaddedString;
 
 const MAX_GAME_NAME_LENGTH: usize = 256;
@@ -13,12 +15,8 @@ pub struct ObserverGame {
 }
 
 impl ObserverGame {
-    /// Returns the current game clock.
-    /// Reads clock_ms via a raw pointer so callers can use vread_unaligned
-    /// to prevent the compiler from caching the value across loop iterations
-    /// in release builds.
-    pub fn time_ms_ptr(&self) -> *const u32 {
-        std::ptr::addr_of!(self.clock_ms)
+    pub fn time(&self) -> Duration {
+        Duration::from_millis(self.clock_ms as u64)
     }
 }
 // Number generated from SIZE fields of https://github.com/TinkerWorX/Blizzard.Net.Warcraft3

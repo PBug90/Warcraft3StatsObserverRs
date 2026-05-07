@@ -157,5 +157,6 @@ impl Drop for ObserverHandle {
             UnmapViewOfFile(self.view);
             CloseHandle(self.mapping);
         }
+        println!("ObserverHandle dropped: shared memory view unmapped and handle closed.");
     }
 }
