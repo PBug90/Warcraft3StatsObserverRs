@@ -1,5 +1,4 @@
-use std::marker::PhantomData;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use winapi::shared::minwindef::LPVOID;
 use winapi::shared::ntdef::HANDLE;
 use winapi::um::errhandlingapi::GetLastError;
@@ -19,61 +18,16 @@ const MAX_SHOPS: usize = 999;
 const OBSERVER_PATH: &str = r"War3StatsObserverSharedMemory";
 
 #[repr(C, packed)]
-pub struct ObserverData<'s> {
+pub struct ObserverData {
     pub version: u32,
     pub refresh_rate: u32,
     pub game: ObserverGame,
     pub players: [PlayerInfo; MAX_PLAYERS],
     pub shop_count: u32,
     pub shops: [ShopInfo; MAX_SHOPS],
-    phantom: PhantomData<&'s ()>,
 }
 
-impl<'s> ObserverData<'s> {
-    pub fn new() -> std::io::Result<&'s ObserverData<'s>> {
-        Self::new_with_refresh_rate(Duration::from_millis(500))
-    }
-
-    pub fn new_with_refresh_rate(duration: Duration) -> std::io::Result<&'s ObserverData<'s>> {
-        let mut path: Vec<u16> = OBSERVER_PATH.encode_utf16().collect();
-        path.push(0);
-
-        let mapping;
-        let errno: i32;
-
-        unsafe {
-            mapping = OpenFileMappingW(FILE_MAP_WRITE, 0, path.as_ptr());
-        };
-
-        if mapping.is_null() {
-            unsafe {
-                errno = GetLastError() as i32;
-            }
-
-            return Err(std::io::Error::from_raw_os_error(errno));
-        }
-
-        let map_pointer: LPVOID;
-
-        unsafe {
-            map_pointer = MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0, 0);
-        }
-
-        if map_pointer.is_null() {
-            unsafe {
-                errno = GetLastError() as i32;
-            }
-
-            return Err(std::io::Error::from_raw_os_error(errno));
-        }
-
-        unsafe {
-            let observer = &mut *(map_pointer as *mut ObserverData);
-            observer.set_refresh_rate(duration);
-            Ok(observer)
-        }
-    }
-
+impl ObserverData {
     pub fn disable(&mut self) {
         self.set_refresh_rate(Duration::ZERO);
     }
@@ -134,22 +88,29 @@ impl ObserverHandle {
             return Err(std::io::Error::from_raw_os_error(errno));
         }
 
-        let handle = ObserverHandle { mapping, view };
-        unsafe {
-            let observer = &mut *(view as *mut ObserverData);
-            observer.set_refresh_rate(duration);
-        }
+        let mut handle = ObserverHandle { mapping, view };
+        handle.set_refresh_rate(duration);
         Ok(handle)
     }
 }
 
 impl Deref for ObserverHandle {
-    type Target = ObserverData<'static>;
+    type Target = ObserverData;
 
     fn deref(&self) -> &Self::Target {
+        // SAFETY: view is non-null (checked at construction) and valid for the handle's lifetime.
         unsafe { &*(self.view as *const ObserverData) }
     }
 }
+
+impl DerefMut for ObserverHandle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: view is non-null (checked at construction), valid for the handle's lifetime,
+        // and &mut self ensures no other mutable reference to this handle exists.
+        unsafe { &mut *(self.view as *mut ObserverData) }
+    }
+}
+
 
 impl Drop for ObserverHandle {
     fn drop(&mut self) {
